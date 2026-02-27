@@ -352,75 +352,82 @@ function update() {
   // Gravity
   player.vy += 0.5;
   player.vy = Math.min(player.vy, 14);
-  
+
+  // --- Move X, resolve X collisions with platforms ---
   player.x += player.vx;
+  platforms.forEach(p => {
+    // All collision in world coordinates (player.x is world x)
+    if (player.x + player.w > p.x && player.x < p.x + p.w &&
+        player.y + player.h > p.y && player.y < p.y + p.h) {
+      if (player.vx > 0) {
+        player.x = p.x - player.w;
+      } else if (player.vx < 0) {
+        player.x = p.x + p.w;
+      }
+      player.vx = 0;
+    }
+  });
+
+  // --- Move Y, resolve Y collisions with platforms ---
+  player.onGround = false;
   player.y += player.vy;
-  
+  platforms.forEach(p => {
+    if (player.x + player.w > p.x && player.x < p.x + p.w &&
+        player.y + player.h > p.y && player.y < p.y + p.h) {
+      if (player.vy > 0) {
+        // Landing on top
+        player.y = p.y - player.h;
+        player.vy = 0;
+        player.onGround = true;
+      } else if (player.vy < 0) {
+        // Hitting underside
+        player.y = p.y + p.h;
+        player.vy = 0;
+      }
+    }
+  });
+
   // Animation
   if (player.onGround && Math.abs(player.vx) > 0.5) {
     player.animTimer++;
     if (player.animTimer > 5) { player.animFrame++; player.animTimer = 0; }
   }
   if (player.invincible > 0) player.invincible--;
-  
-  // Platform collision
-  player.onGround = false;
-  platforms.forEach(p => {
-    let pp = { x: p.x - worldOffset, y: p.y, w: p.w, h: p.h };
-    if (aabb(player, pp)) {
-      let overlapX = Math.min(player.x + player.w, pp.x + pp.w) - Math.max(player.x, pp.x);
-      let overlapY = Math.min(player.y + player.h, pp.y + pp.h) - Math.max(player.y, pp.y);
-      if (overlapX > overlapY) {
-        if (player.y + player.h/2 < pp.y + pp.h/2) {
-          player.y = pp.y - player.h;
-          if (player.vy > 0) { player.vy = 0; player.onGround = true; }
-        } else {
-          player.y = pp.y + pp.h;
-          if (player.vy < 0) player.vy = 2;
-        }
-      } else {
-        if (player.x + player.w/2 < pp.x + pp.w/2) {
-          player.x = pp.x - player.w;
-        } else {
-          player.x = pp.x + pp.w;
-        }
-        player.vx = 0;
-      }
-    }
-  });
-  
-  // Mushroom collision
+
+  // Move mushrooms
   mushrooms.forEach(m => {
     if (!m.alive) return;
-    // Move mushroom first
     m.x -= 0.8;
     m.bounce = Math.sin(Date.now() * 0.005) * 2;
+  });
 
-    let mp = { x: m.x - worldOffset, y: m.y, w: m.w, h: m.h };
-    if (aabb(player, mp)) {
-      let playerBottom = player.y + player.h;
-      let mushroomTop = m.y;
-      // Stomp: player falling AND feet above mushroom midpoint
-      if (player.vy > 0 && playerBottom < mushroomTop + m.h * 0.5) {
-        m.alive = false;
-        score += 100;
-        document.getElementById('score').textContent = score;
-        player.vy = -9;
-        player.y = mushroomTop - player.h;
-        spawnParticles(m.x + m.w/2, m.y + m.h/2);
-      } else if (player.invincible <= 0) {
-        // Side or bottom hit
-        lives--;
-        player.invincible = 90;
-        player.vy = -8;
-        player.vx = player.facing * -3;
-        if (lives <= 0) {
-          gameRunning = false;
-          if (score > hiScore) hiScore = score;
-          document.getElementById('hi').textContent = hiScore;
-          document.getElementById('final-score').textContent = score;
-          document.getElementById('game-over').style.display = 'block';
-        }
+  // Mushroom collision (all world coordinates)
+  mushrooms.forEach(m => {
+    if (!m.alive) return;
+    // AABB in world space
+    if (player.x + player.w <= m.x || player.x >= m.x + m.w) return;
+    if (player.y + player.h <= m.y || player.y >= m.y + m.h) return;
+
+    // Stomp: player falling AND player's bottom edge is in the top half of the mushroom
+    if (player.vy >= 0 && (player.y + player.h) < (m.y + m.h * 0.55)) {
+      m.alive = false;
+      score += 100;
+      document.getElementById('score').textContent = score;
+      player.vy = -9;
+      player.y = m.y - player.h;
+      spawnParticles(m.x + m.w/2, m.y + m.h/2);
+    } else if (player.invincible <= 0) {
+      // Side or bottom hit
+      lives--;
+      player.invincible = 90;
+      player.vy = -8;
+      player.vx = player.facing * -3;
+      if (lives <= 0) {
+        gameRunning = false;
+        if (score > hiScore) hiScore = score;
+        document.getElementById('hi').textContent = hiScore;
+        document.getElementById('final-score').textContent = score;
+        document.getElementById('game-over').style.display = 'block';
       }
     }
   });
